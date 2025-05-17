@@ -1,9 +1,28 @@
 import React, { useState } from 'react';
 import './BatchBrowser.css';
 
-const { ipcRenderer } = window.require('electron');
+// Safely access Electron API
+const electronAPI = (() => {
+  try {
+    if (window.require) {
+      const { ipcRenderer } = window.require('electron');
+      return { ipcRenderer };
+    }
+  } catch (e) {
+    console.log("Running outside of Electron environment");
+  }
+  // Return mock implementations when not in Electron
+  return {
+    ipcRenderer: {
+      sendSync: (channel, data) => {
+        console.log(`Mock IPC sendSync: ${channel}`, data);
+        return null;
+      }
+    }
+  };
+})();
 
-const BatchBrowser = ({ urls, batchSize, onBatchStart, onBatchComplete }) => {
+const BatchBrowser = ({ urls, batchSize, onBatchStart, onBatchComplete, onOpenUrl }) => {
   const [currentBatch, setCurrentBatch] = useState(1);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStatus, setProcessingStatus] = useState('');
@@ -35,16 +54,22 @@ const BatchBrowser = ({ urls, batchSize, onBatchStart, onBatchComplete }) => {
       onBatchStart(batchNum, batchUrls);
     }
     
-    // Open batch in a new window via Electron IPC
-    const windowId = ipcRenderer.sendSync('open-batch', {
-      batchId: batchNum,
-      urls: batchUrls
-    });
-    
-    if (windowId) {
-      setProcessingStatus(`Batch ${batchNum} window opened (Window ID: ${windowId})`);
+    // Open the first URL in the embedded browser
+    if (onOpenUrl && batchUrls.length > 0) {
+      onOpenUrl(batchUrls[0]);
+      setProcessingStatus(`Batch ${batchNum} loaded in embedded browser. Use browser controls to navigate.`);
     } else {
-      setProcessingStatus(`Failed to open batch ${batchNum} window.`);
+      // Legacy behavior for compatibility - this shouldn't actually open windows anymore
+      const windowId = electronAPI.ipcRenderer.sendSync('open-batch', {
+        batchId: batchNum,
+        urls: batchUrls
+      });
+      
+      if (windowId) {
+        setProcessingStatus(`Batch ${batchNum} window opened (Window ID: ${windowId})`);
+      } else {
+        setProcessingStatus(`Batch ${batchNum} prepared. Using embedded browser to view URLs.`);
+      }
     }
     
     setIsProcessing(false);

@@ -1,0 +1,7 @@
+{
+  "name": "url-opener",
+  "version": "0.1.0",
+  "description": "URL opener",
+  "main": "electron.js",
+  "author": "sadiqa thornton <info@ultramarinedreams.net>"
+}

@@ -4,8 +4,26 @@ import './App.css';
 import EmbeddedBrowser from './components/EmbeddedBrowser';
 import BatchBrowser from './components/BatchBrowser';
 import UrlHistory from './components/UrlHistory';
+// import DevHelper from './components/DevHelper';
 
-const { ipcRenderer } = window.require('electron');
+// Safely access Electron API
+const electronAPI = (() => {
+  try {
+    if (window.require) {
+      const { ipcRenderer } = window.require('electron');
+      return { ipcRenderer };
+    }
+  } catch (e) {
+    console.log("Running outside of Electron environment");
+  }
+  // Return mock implementations when not in Electron
+  return {
+    ipcRenderer: {
+      on: () => {},
+      send: () => {}
+    }
+  };
+})();
 
 function App() {
   const [inputText, setInputText] = useState('');
@@ -19,9 +37,33 @@ function App() {
   const [currentBatch, setCurrentBatch] = useState(1);
   const [totalBatches, setTotalBatches] = useState(1);
   const [parsedUrls, setParsedUrls] = useState([]);
-  const [activeTab, setActiveTab] = useState('input'); // 'input', 'embedded', 'history'
+  const [activeTab, setActiveTab] = useState('embedded'); // 'input', 'embedded', 'history'
   const [currentUrl, setCurrentUrl] = useState('');
   const fileInputRef = useRef(null);
+  
+  // Check if we're running in Electron
+  const isElectron = (() => {
+    try {
+      return !!window.require;
+    } catch (e) {
+      return false;
+    }
+  })();
+
+  // Show a message if not running in Electron
+  useEffect(() => {
+    if (!isElectron) {
+      setStatus('Running in development mode. For full functionality, run with npm run electron');
+      
+      // Show instructions in the console for developers
+      console.log('==== URL OPENER APP INSTRUCTIONS ====');
+      console.log('To run the app correctly, use these steps:');
+      console.log('1. First start the React dev server: npm start');
+      console.log('2. Then start the Electron app: npm run electron-dev');
+      console.log('Do not open the React app in a browser directly.');
+      console.log('=====================================');
+    }
+  }, [isElectron, setStatus]);
   
   // Parse URLs from text input
   const parseURLs = (text) => {
@@ -143,6 +185,17 @@ function App() {
     setCurrentUrl(url);
   };
 
+  // Function to open a URL in the embedded browser from anywhere in the app
+  const openInEmbeddedBrowser = (url) => {
+    // Switch to embedded browser tab
+    setActiveTab('embedded');
+    
+    // Set the URL after a small delay to ensure the tab has changed
+    setTimeout(() => {
+      setCurrentUrl(url);
+    }, 50);
+  };
+
   return (
     <div className="app-container">
       <div className="app-header">
@@ -171,6 +224,12 @@ function App() {
       </div>
       
       <div className="app-content">
+        {!isElectron && (
+          <div className="electron-warning">
+            <p>Running in web browser mode. For full functionality including the embedded browser, please run the app using <code>npm run electron</code> after starting the React development server.</p>
+          </div>
+        )}
+        
         {activeTab === 'input' && (
           <div className="input-tab">
             <div className="upload-section">
@@ -252,6 +311,7 @@ function App() {
                   batchSize={batchSize}
                   onBatchStart={handleBatchStart}
                   onBatchComplete={handleBatchComplete}
+                  onOpenUrl={openInEmbeddedBrowser}
                 />
               )}
             </div>
@@ -277,6 +337,30 @@ function App() {
         {activeTab === 'embedded' && (
           <div className="embedded-tab">
             <div className="embedded-browser-container">
+              {!currentUrl && (
+                <div className="direct-url-input">
+                  <h3>Enter FieldNation URL directly</h3>
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    if (currentUrl) {
+                      // Force refresh of the component
+                      const url = currentUrl;
+                      setCurrentUrl('');
+                      setTimeout(() => setCurrentUrl(url), 50);
+                    }
+                  }}>
+                    <input 
+                      type="text" 
+                      value={currentUrl || ''} 
+                      onChange={(e) => setCurrentUrl(e.target.value)}
+                      placeholder="https://app.fieldnation.com/workorders/123456" 
+                      className="direct-url-field"
+                    />
+                    <button type="submit" className="url-load-button">Load URL</button>
+                  </form>
+                </div>
+              )}
+              
               {currentUrl ? (
                 <EmbeddedBrowser 
                   url={currentUrl}
@@ -285,8 +369,7 @@ function App() {
                 />
               ) : (
                 <div className="no-url-message">
-                  <p>No URL currently loaded</p>
-                  <p>Select a batch in the "Input URLs" tab to start browsing</p>
+                  <p>Enter a FieldNation URL above to begin browsing</p>
                 </div>
               )}
             </div>
@@ -295,10 +378,13 @@ function App() {
         
         {activeTab === 'history' && (
           <div className="history-tab">
-            <UrlHistory />
+            <UrlHistory onOpenUrl={openInEmbeddedBrowser} />
           </div>
         )}
       </div>
+      
+      {/* Development Helper Component */}
+      {/* <DevHelper /> */}
     </div>
   );
 }

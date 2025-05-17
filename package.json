@@ -2,22 +2,35 @@
   "name": "url-opener",
   "version": "0.1.0",
   "private": true,
+  "description": "URL opener",
+  "author": "sadiqa thornton <info@ultramarinedreams.net>",
   "dependencies": {
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
     "@testing-library/user-event": "^13.5.0",
+    "electron-is-dev": "^3.0.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "react-scripts start",
+    "start": "BROWSER=none react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "dev": "concurrently \"BROWSER=none npm start\" \"npm run electron-dev\"",
+    "electron-dev": "electron electron.js",
+    "electron": "electron electron.js",
+    "electron-build": "electron-builder",
+    "build-electron": "npm run build && npm run electron-build",
+    "app": "BROWSER=none concurrently \"npm start\" --kill-others \"wait-on http://localhost:3000 && npm run electron\"",
+    "package": "npm run build && node build-electron.js",
+    "clean-package": "rm -rf app dist && npm run package",
+    "run-prod": "npm run clean-package && open dist/mac-arm64/URL\\ Opener.app"
   },
+  "main": "electron.js",
   "eslintConfig": {
     "extends": [
       "react-app",
@@ -35,5 +48,35 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "electron-builder": "^26.0.12",
+    "wait-on": "^8.0.3",
+    "electron": "^36.2.1"
+  },
+  "build": {
+    "productName": "URL Opener",
+    "appId": "com.ultramarinedreams.urlOpener",
+    "files": [
+      "build/**/*",
+      "node_modules/**/*",
+      "electron.js",
+      "preload.js",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "electron.js"
+    },
+    "directories": {
+      "buildResources": "assets",
+      "output": "dist"
+    },
+    "asar": false,
+    "extends": null,
+    "mac": {
+      "target": "dir",
+      "category": "public.app-category.productivity"
+    }
   }
 }

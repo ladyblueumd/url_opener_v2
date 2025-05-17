@@ -1,21 +1,70 @@
 import React, { useState, useEffect } from 'react';
 import './UrlHistory.css';
 
-const { ipcRenderer } = window.require('electron');
+// Safely access Electron API
+const electronAPI = (() => {
+  try {
+    if (window.require) {
+      const { ipcRenderer } = window.require('electron');
+      return { ipcRenderer };
+    }
+  } catch (e) {
+    console.log("Running outside of Electron environment");
+  }
+  // Return mock implementations when not in Electron
+  return {
+    ipcRenderer: {
+      invoke: async () => {
+        console.log('Mock invoke: get-opened-urls');
+        return []; // Return empty array in web browser mode
+      },
+      send: (channel, data) => console.log(`Mock IPC send: ${channel}`, data)
+    }
+  };
+})();
 
-const UrlHistory = () => {
+const UrlHistory = ({ onOpenUrl }) => {
   const [urlHistory, setUrlHistory] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortOrder, setSortOrder] = useState('newest');
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Check if we're running in Electron
+  const isElectron = (() => {
+    try {
+      return !!window.require;
+    } catch (e) {
+      return false;
+    }
+  })();
 
   useEffect(() => {
     // Load URL history from electron store
     const loadHistory = async () => {
       try {
         setIsLoading(true);
-        const history = await ipcRenderer.invoke('get-opened-urls');
-        setUrlHistory(history);
+        
+        if (isElectron) {
+          const history = await electronAPI.ipcRenderer.invoke('get-opened-urls');
+          setUrlHistory(history || []);
+        } else {
+          // In browser mode, we'll use some sample data
+          setUrlHistory([
+            {
+              url: 'https://app.fieldnation.com/workorders/sample1',
+              timestamp: new Date().toISOString(),
+              batchId: 1
+            },
+            {
+              url: 'https://app.fieldnation.com/workorders/sample2',
+              timestamp: new Date(Date.now() - 3600000).toISOString(),
+              batchId: 1
+            }
+          ]);
+          
+          // Short delay to simulate loading
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       } catch (error) {
         console.error('Failed to load URL history:', error);
       } finally {
@@ -24,7 +73,7 @@ const UrlHistory = () => {
     };
 
     loadHistory();
-  }, []);
+  }, [isElectron]);
 
   // Filter and sort the URL history
   const filteredAndSortedHistory = urlHistory
@@ -64,13 +113,29 @@ const UrlHistory = () => {
     setSortOrder(e.target.value);
   };
 
-  // Handle open URL in external browser
+  // Handle open URL in embedded browser
   const handleOpenUrl = (url) => {
-    ipcRenderer.send('open-external', url);
+    if (onOpenUrl) {
+      // Use the provided handler to open in embedded browser
+      onOpenUrl(url);
+    } else if (isElectron) {
+      // Fallback to opening in Electron (should be disabled by main process)
+      electronAPI.ipcRenderer.send('open-external', url);
+    } else {
+      // Fallback for browser mode - will be a popup, but this is just for dev mode
+      window.open(url, '_blank');
+    }
   };
 
   return (
     <div className="url-history">
+      {!isElectron && (
+        <div className="browser-mode-notice">
+          <p>Running in browser mode. Limited functionality available.</p>
+          <p>For full functionality, run the Electron app.</p>
+        </div>
+      )}
+      
       <div className="history-header">
         <h2>URL Access History</h2>
         
@@ -127,9 +192,9 @@ const UrlHistory = () => {
                     <button 
                       className="action-button"
                       onClick={() => handleOpenUrl(item.url)}
-                      title="Open in browser"
+                      title="Open in embedded browser"
                     >
-                      ↗️
+                      🔍
                     </button>
                   </td>
                 </tr>
